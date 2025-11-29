@@ -71,73 +71,90 @@ class LLMHandler:
         
         return model, tokenizer
     
-    def generate_response(self, prompt: str, max_length: int = 256) -> str:
-        """Generate response from LLM"""
-        inputs = self.tokenizer(
-            prompt, 
-            return_tensors="pt", 
-            truncation=True,
-            max_length=1024
-        ).to(self.device)
-        
-        with torch.no_grad():
-            outputs = self.model.generate(
-                **inputs,
-                max_new_tokens=max_length,
-                temperature=0.7,
-                top_p=0.9,
-                top_k=50,
-                do_sample=True,
-                pad_token_id=self.tokenizer.pad_token_id,
-                eos_token_id=self.tokenizer.eos_token_id,
-                repetition_penalty=1.2,
-                no_repeat_ngram_size=3
-            )
-        
-        response = self.tokenizer.decode(outputs[0], skip_special_tokens=True)
-        
-        # Extract only the generated part
-        response = self._clean_response(response, prompt)
-        
-        return response
-    
     def _clean_response(self, response: str, prompt: str) -> str:
-        """Clean and extract the actual response - only take last assistant response"""
-        # Remove the prompt from response
-        if prompt in response:
-            response = response.replace(prompt, "").strip()
-        
-        # Split by assistant marker and take only the LAST response
+        """Clean and extract the actual response - more robust approach"""
+        # Method 1: If we find the assistant marker, extract everything after the last one
         if "<|im_start|>assistant" in response:
             parts = response.split("<|im_start|>assistant")
-            response = parts[-1].strip()  # Take only the last assistant response
+            response = parts[-1].strip()
         
-        # Remove end markers
-        if "<|im_end|>" in response:
-            response = response.split("<|im_end|>")[0].strip()
+        # Method 2: If no marker but prompt exists, remove prompt
+        elif prompt in response:
+            response = response.replace(prompt, "").strip()
         
-        # Clean up any remaining markers
-        response = response.replace("<|im_start|>user", "").strip()
-        response = response.replace("<|im_start|>system", "").strip()
+        # Method 3: If response starts with assistant text after prompt removal
+        assistant_markers = ["<|im_start|>assistant", "assistant"]
+        for marker in assistant_markers:
+            if response.startswith(marker):
+                response = response[len(marker):].strip()
         
-        # Remove repeated lines
-        lines = response.split('\n')
-        unique_lines = []
+        # Remove end markers and other special tokens
+        end_markers = ["<|im_end|>", "<|endoftext|>", "</s>"]
+        for marker in end_markers:
+            if marker in response:
+                response = response.split(marker)[0].strip()
+        
+        # Clean up any remaining chat markers
+        chat_markers = ["<|im_start|>user", "<|im_start|>system", "user:", "system:"]
+        for marker in chat_markers:
+            response = response.replace(marker, "").strip()
+        
+        # Remove duplicate lines while preserving order
+        lines = []
         seen = set()
-        for line in lines:
-            line = line.strip()
-            if line and line not in seen:
-                unique_lines.append(line)
-                seen.add(line)
+        for line in response.split('\n'):
+            line_clean = line.strip()
+            if line_clean and line_clean not in seen:
+                lines.append(line_clean)
+                seen.add(line_clean)
         
-        response = '\n'.join(unique_lines)
+        response = '\n'.join(lines)
         
-        # Limit length if too long
+        # Smart length limiting - don't cut in middle of sentences
         if len(response) > 400:
-            sentences = [s.strip() for s in response.split('.') if s.strip()]
-            response = '. '.join(sentences[:3]) + '.'
+            # Try to cut at sentence boundaries
+            sentences = []
+            current = ""
+            for char in response:
+                current += char
+                if char in '.!?。！？' and len(current) > 20:
+                    sentences.append(current.strip())
+                    current = ""
+                    if sum(len(s) for s in sentences) > 350:
+                        break
+            if sentences:
+                response = ' '.join(sentences)
+            else:
+                # Fallback: cut at word boundary
+                response = response[:397] + "..."
         
         return response.strip()
+
+    def create_prompt(self, context: str, query: str, chat_history: List[Dict]) -> str:
+        """Create optimized prompt for Vietnamese models"""
+        # Vietnamese system prompt
+        system_prompt = """Bạn là trợ lý AI cho nhà hàng. Hãy trả lời câu hỏi về thực đơn, giá cả, đặt món và các dịch vụ nhà hàng một cách ngắn gọn, chính xác và hữu ích."""
+        
+        prompt_parts = []
+        
+        # System message
+        prompt_parts.append(f"<|im_start|>system\n{system_prompt}<|im_end|>")
+        
+        # Add context if available
+        if context:
+            prompt_parts.append(f"<|im_start|>system\nThông tin thực đơn: {context}<|im_end|>")
+        
+        # Add limited chat history (last 2-3 turns to avoid context overflow)
+        max_history = 2
+        for turn in chat_history[-max_history:]:
+            prompt_parts.append(f"<|im_start|>user\n{turn['user']}<|im_end|>")
+            prompt_parts.append(f"<|im_start|>assistant\n{turn['assistant']}<|im_end|>")
+        
+        # Current query
+        prompt_parts.append(f"<|im_start|>user\n{query}<|im_end|>")
+        prompt_parts.append("<|im_start|>assistant\n")
+        
+        return "\n".join(prompt_parts)
     
     def create_prompt(self, context: str, query: str, chat_history: List[Dict]) -> str:
         """Create straightforward prompt using vinallama chat template"""

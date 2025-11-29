@@ -193,8 +193,8 @@ class FoodOrderChatbot:
             prompt = self.llm.create_prompt(context, message, session['chat_history'])
             llm_response = self.llm.generate_response(prompt, max_length=150)
             
-            # If LLM response is poor, provide fallback
-            if len(llm_response) < 20 or "đăng ký" in llm_response.lower():
+            # If LLM response is poor or empty, provide fallback
+            if len(llm_response) < 10:
                 if relevant_items:
                     response = f"Tôi tìm thấy các món sau:\n\n"
                     for item in relevant_items:

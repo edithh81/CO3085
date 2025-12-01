@@ -12,7 +12,7 @@ class RAGSystem:
         
         # Use lightweight embedding model
         print("Loading embedding model...")
-        self.embedding_model = SentenceTransformer('paraphrase-multilingual-MiniLM-L12-v2')
+        self.embedding_model = SentenceTransformer('dangvantuan/vietnamese-embedding')
         
         self.index = None
         self.documents = []

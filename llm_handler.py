@@ -3,12 +3,12 @@ from transformers import AutoTokenizer, AutoModelForCausalLM, BitsAndBytesConfig
 from typing import List, Dict
 
 class LLMHandler:
-    def __init__(self, model_name: str = "vilm/vinallama-2.7b-chat"):
+    def __init__(self, model_name: str = "vilm/vinallama-7b-chat"):
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
         print(f"Using device: {self.device}")
         
-        # Load only vinallama-2.7b-chat
-        model_to_load = "vilm/vinallama-2.7b-chat"
+        # Load only vinallama-7b-chat
+        model_to_load = "vilm/vinallama-7b-chat"
         
         self.model = None
         self.tokenizer = None

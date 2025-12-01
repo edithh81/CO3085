@@ -36,7 +36,7 @@ class FoodOrderChatbot:
             return 'price_info'
         elif any(word in query_lower for word in ['giỏ', 'cart', 'đơn hàng', 'xem giỏ']):
             return 'view_cart'
-        elif any(word in query_lower for word in ['xác nhận', 'confirm', 'đồng ý', 'ok', 'được']):
+        elif any(word in query_lower for word in ['xác nhận', 'confirm']):
             return 'confirm_order'
         elif any(word in query_lower for word in ['nước', 'soup', 'canh', 'lỏng']):
             return 'soup_dishes'
